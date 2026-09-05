@@ -1,0 +1,65 @@
+name: Publish BiliTV Release
+
+on:
+  push:
+    branches:
+      - "publish/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: public-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout payload
+        uses: actions/checkout@v5
+
+      - name: Verify payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#publish/}"
+          test "$tag" != "$GITHUB_REF_NAME"
+          test -f "payload/BiliTV-${tag}.apk"
+          test -f "payload/BiliTV-${tag}.apk.sha256"
+          test -s payload/RELEASE_NOTES.md
+          cd payload
+          sha256sum --check "BiliTV-${tag}.apk.sha256"
+
+      - name: Create public GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#publish/}"
+          apk="payload/BiliTV-${tag}.apk"
+          checksum="${apk}.sha256"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" "$checksum" --clobber
+            gh release edit "$tag" \
+              --title "BiliTV ${tag}" \
+              --notes-file payload/RELEASE_NOTES.md \
+              --latest
+          else
+            gh release create "$tag" "$apk" "$checksum" \
+              --target main \
+              --title "BiliTV ${tag}" \
+              --notes-file payload/RELEASE_NOTES.md \
+              --latest
+          fi
+
+      - name: Remove staging branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api \
+            --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/git/refs/heads/${GITHUB_REF_NAME}"
