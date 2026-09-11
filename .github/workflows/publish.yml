@@ -40,6 +40,7 @@ jobs:
           tag="${GITHUB_REF_NAME#publish/}"
           apk="payload/BiliTV-${tag}.apk"
           checksum="${apk}.sha256"
+          source_target="empty-source"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" "$checksum" --clobber
             gh release edit "$tag" \
@@ -48,7 +49,7 @@ jobs:
               --latest
           else
             gh release create "$tag" "$apk" "$checksum" \
-              --target main \
+              --target "$source_target" \
               --title "BiliTV ${tag}" \
               --notes-file payload/RELEASE_NOTES.md \
               --latest
